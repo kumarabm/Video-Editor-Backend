@@ -1,0 +1,539 @@
+openapi: 3.0.0
+info:
+  title: Video Editing Platform API
+  description: API for uploading, editing, and rendering videos
+  version: 1.0.0
+  contact:
+    email: support@videoeditor.com
+
+servers:
+  - url: http://localhost:5000
+    description: Local development server
+
+tags:
+  - name: Videos
+    description: Operations related to videos
+  - name: Operations
+    description: Video editing operations like trimming, adding subtitles
+  - name: Renders
+    description: Video rendering operations
+  - name: System
+    description: System related operations
+
+paths:
+  /api/videos/upload:
+    post:
+      tags:
+        - Videos
+      summary: Upload a new video
+      description: Upload a video file to the platform
+      operationId: uploadVideo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                video:
+                  type: string
+                  format: binary
+                name:
+                  type: string
+                  description: Name for the video
+                description:
+                  type: string
+                  description: Optional description
+      responses:
+        '200':
+          description: Video uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoResponse'
+        '400':
+          description: Invalid input, object invalid
+        '500':
+          description: Server error
+
+  /api/videos:
+    get:
+      tags:
+        - Videos
+      summary: Get all videos
+      description: Returns a list of all uploaded videos
+      operationId: getAllVideos
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of videos to return
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 100
+      responses:
+        '200':
+          description: A list of videos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Video'
+
+  /api/videos/{id}:
+    get:
+      tags:
+        - Videos
+      summary: Get video by ID
+      description: Returns a single video with all its details
+      operationId: getVideo
+      parameters:
+        - name: id
+          in: path
+          description: ID of video to return
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Video found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoResponse'
+        '404':
+          description: Video not found
+
+  /api/videos/{id}/trim:
+    post:
+      tags:
+        - Operations
+      summary: Trim a video
+      description: Create a new version of the video trimmed to specified start and end times
+      operationId: trimVideo
+      parameters:
+        - name: id
+          in: path
+          description: ID of video to trim
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - startTime
+                - endTime
+              properties:
+                startTime:
+                  type: number
+                  description: Start time in seconds
+                  example: 10.5
+                endTime:
+                  type: number
+                  description: End time in seconds
+                  example: 30.2
+      responses:
+        '200':
+          description: Operation created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: Invalid input
+        '404':
+          description: Video not found
+        '500':
+          description: Server error
+
+  /api/videos/{id}/subtitles:
+    post:
+      tags:
+        - Operations
+      summary: Add subtitles to a video
+      description: Add subtitle text to specified time ranges in the video
+      operationId: addSubtitles
+      parameters:
+        - name: id
+          in: path
+          description: ID of video to add subtitles to
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - subtitles
+              properties:
+                subtitles:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - text
+                      - startTime
+                      - endTime
+                    properties:
+                      text:
+                        type: string
+                        description: The subtitle text
+                        example: "Hello world"
+                      startTime:
+                        type: number
+                        description: Start time in seconds
+                        example: 5.0
+                      endTime:
+                        type: number
+                        description: End time in seconds
+                        example: 10.0
+                style:
+                  type: object
+                  properties:
+                    fontSize:
+                      type: number
+                      example: 24
+                    fontColor:
+                      type: string
+                      example: "white"
+                    backgroundColor:
+                      type: string
+                      example: "black"
+                    position:
+                      type: string
+                      enum: [top, middle, bottom]
+                      example: "bottom"
+      responses:
+        '200':
+          description: Operation created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+        '400':
+          description: Invalid input
+        '404':
+          description: Video not found
+        '500':
+          description: Server error
+
+  /api/videos/{id}/render:
+    post:
+      tags:
+        - Renders
+      summary: Render a video with operations
+      description: Create a final rendered video with all specified operations applied
+      operationId: renderVideo
+      parameters:
+        - name: id
+          in: path
+          description: ID of video to render
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operations:
+                  type: array
+                  items:
+                    type: string
+                  description: IDs of operations to include in render (if empty, all completed operations will be used)
+                  example: ["op123", "op456"]
+                output:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      example: "final_video"
+                    format:
+                      type: string
+                      enum: [mp4, mov, avi, webm]
+                      example: "mp4"
+                    quality:
+                      type: string
+                      enum: [low, medium, high]
+                      example: "high"
+      responses:
+        '200':
+          description: Render job created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderResponse'
+        '400':
+          description: Invalid input
+        '404':
+          description: Video not found
+        '500':
+          description: Server error
+
+  /api/videos/{id}/download:
+    get:
+      tags:
+        - Renders
+      summary: Download a rendered video
+      description: Download the most recent successfully rendered version of the video
+      operationId: downloadVideo
+      parameters:
+        - name: id
+          in: path
+          description: ID of video to download
+          required: true
+          schema:
+            type: string
+        - name: renderId
+          in: query
+          description: Optional specific render ID to download
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Video file stream
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Video or render not found
+        '500':
+          description: Server error
+
+  /api/renders/{id}:
+    get:
+      tags:
+        - Renders
+      summary: Get render status
+      description: Check the status and progress of a render job
+      operationId: getRenderStatus
+      parameters:
+        - name: id
+          in: path
+          description: ID of render to check
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Render status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderResponse'
+        '404':
+          description: Render not found
+
+  /api/stats:
+    get:
+      tags:
+        - System
+      summary: Get system statistics
+      description: Get system-wide statistics about videos, operations, and renders
+      operationId: getStats
+      responses:
+        '200':
+          description: System statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      apiStatus:
+                        type: string
+                        example: "operational"
+                      activeRenders:
+                        type: integer
+                        example: 2
+                      totalVideos:
+                        type: integer
+                        example: 15
+                      storageUsed:
+                        type: string
+                        example: "1.2 GB"
+                      recentJobs:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Job'
+
+components:
+  schemas:
+    Video:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "v123"
+        name:
+          type: string
+          example: "My Video"
+        description:
+          type: string
+          example: "A test video"
+        filename:
+          type: string
+          example: "1650123456_video.mp4"
+        duration:
+          type: number
+          example: 65.4
+        fileSize:
+          type: number
+          example: 12345678
+        status:
+          type: string
+          enum: [uploaded, processing, ready, error]
+          example: "ready"
+        url:
+          type: string
+          example: "/api/videos/v123/download"
+        createdAt:
+          type: string
+          format: date-time
+
+    Operation:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "op123"
+        videoId:
+          type: string
+          example: "v123"
+        type:
+          type: string
+          enum: [trim, subtitles]
+          example: "trim"
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          example: "completed"
+        params:
+          type: object
+        output:
+          type: object
+          properties:
+            filename:
+              type: string
+            path:
+              type: string
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+          example: 100
+        error:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    Render:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "r123"
+        videoId:
+          type: string
+          example: "v123"
+        operations:
+          type: array
+          items:
+            type: string
+          example: ["op123", "op456"]
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          example: "completed"
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+          example: 75
+        output:
+          type: object
+          properties:
+            name:
+              type: string
+            format:
+              type: string
+            quality:
+              type: string
+            path:
+              type: string
+        error:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "op123"
+        videoId:
+          type: string
+          example: "v123"
+        type:
+          type: string
+          example: "trim"
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          example: "processing"
+        createdAt:
+          type: string
+          format: date-time
+        progress:
+          type: number
+          example: 45
+
+    VideoResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/Video'
+
+    OperationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/Operation'
+
+    RenderResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/Render'
