@@ -3,6 +3,7 @@ import { getVideoMetadata } from './ffmpeg.js';
 import { getFileSize } from '../utils/fileUtils.js';
 import { queueVideoOperation, queueRender } from './jobQueue.js';
 import mongoose from 'mongoose';
+import { ObjectId } from 'mongodb';
 
 /**
  * Create a new video entry from an uploaded file
@@ -51,7 +52,7 @@ const createTrimOperation = async (
   
   // Create operation record
   const operation = {
-    videoId: mongoose.Types.ObjectId(videoId),
+    videoId: ObjectId.isValid(videoId) ? new ObjectId(videoId) : videoId,
     type: 'trim',
     params: {
       startTime,
@@ -85,7 +86,7 @@ const createSubtitlesOperation = async (
   
   // Create operation record
   const operation = {
-    videoId: mongoose.Types.ObjectId(videoId),
+    videoId: ObjectId.isValid(videoId) ? new ObjectId(videoId) : videoId,
     type: 'subtitles',
     params: {
       subtitles,
@@ -118,8 +119,10 @@ const createRenderJob = async (
   
   // Create render record
   const render = {
-    videoId: mongoose.Types.ObjectId(videoId),
-    operations: operations ? operations.map(id => mongoose.Types.ObjectId(id)) : [],
+    videoId: ObjectId.isValid(videoId) ? new ObjectId(videoId) : videoId,
+    operations: operations ? operations.map(id => 
+      ObjectId.isValid(id) ? new ObjectId(id) : id
+    ) : [],
     status: 'pending',
     progress: 0,
     output: {
@@ -162,7 +165,7 @@ const getSystemStats = async () => {
     
     return {
       id: job.id,
-      videoId: job.videoId.toString(),
+      videoId: typeof job.videoId === 'object' && job.videoId !== null ? job.videoId.toString() : job.videoId,
       type: isRender ? 'render' : job.type,
       status: job.status,
       createdAt: job.createdAt.toISOString(),

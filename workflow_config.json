@@ -1,0 +1,9 @@
+{
+  "workflows": [
+    {
+      "name": "Test Server",
+      "command": "node test-server.js",
+      "runOnOpen": true
+    }
+  ]
+}

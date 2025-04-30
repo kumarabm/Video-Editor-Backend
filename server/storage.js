@@ -5,27 +5,44 @@ import { User, Video, Operation, Render } from '../shared/models.js';
 // MongoDB implementation
 export class MongoDBStorage {
   constructor() {
-    // Check if MongoDB is connected
-    this.isConnected = mongoose.connection.readyState === 1;
+    // Initialize in-memory storage regardless (we'll use it as fallback)
+    this.inMemoryStorage = {
+      users: [],
+      videos: [],
+      operations: [],
+      renders: []
+    };
+    this.idCounters = {
+      users: 1,
+      videos: 1,
+      operations: 1,
+      renders: 1
+    };
+    
+    // Check if MongoDB is connected (we'll update this after each connection attempt)
+    this.updateConnectionStatus();
+    
+    console.log(`Storage initialized. Using ${this.isConnected ? 'MongoDB' : 'in-memory storage'}`);
+  }
+  
+  updateConnectionStatus() {
+    // Check either global flag or mongoose connection state
+    this.isConnected = global.__USING_REAL_DATABASE__ === true || 
+                       mongoose.connection.readyState === 1;
+    
     if (!this.isConnected) {
       console.warn('MongoDB not connected - using in-memory storage fallback');
-      this.inMemoryStorage = {
-        users: [],
-        videos: [],
-        operations: [],
-        renders: []
-      };
-      this.idCounters = {
-        users: 1,
-        videos: 1,
-        operations: 1,
-        renders: 1
-      };
     }
   }
   // User operations
   async getUser(id) {
+    this.updateConnectionStatus();
     try {
+      if (!this.isConnected) {
+        // Use in-memory storage fallback
+        const user = this.inMemoryStorage.users.find(u => u._id === id || u.id === id);
+        return user || null;
+      }
       return await User.findById(id);
     } catch (error) {
       console.error('Error getting user:', error);
@@ -34,7 +51,13 @@ export class MongoDBStorage {
   }
 
   async getUserByUsername(username) {
+    this.updateConnectionStatus();
     try {
+      if (!this.isConnected) {
+        // Use in-memory storage fallback
+        const user = this.inMemoryStorage.users.find(u => u.username === username);
+        return user || null;
+      }
       return await User.findOne({ username });
     } catch (error) {
       console.error('Error getting user by username:', error);
@@ -43,7 +66,20 @@ export class MongoDBStorage {
   }
 
   async createUser(user) {
+    this.updateConnectionStatus();
     try {
+      if (!this.isConnected) {
+        // Use in-memory storage fallback
+        const newUser = {
+          ...user,
+          _id: String(this.idCounters.users++),
+          id: String(this.idCounters.users-1),
+          createdAt: new Date(),
+          toObject: function() { return this; }
+        };
+        this.inMemoryStorage.users.push(newUser);
+        return newUser;
+      }
       return await User.create(user);
     } catch (error) {
       console.error('Error creating user:', error);
@@ -53,6 +89,7 @@ export class MongoDBStorage {
 
   // Video operations
   async createVideo(video) {
+    this.updateConnectionStatus();
     try {
       if (!this.isConnected) {
         // Use in-memory storage fallback
@@ -74,6 +111,7 @@ export class MongoDBStorage {
   }
 
   async getVideo(id) {
+    this.updateConnectionStatus();
     try {
       if (!this.isConnected) {
         // Use in-memory storage fallback
@@ -157,7 +195,11 @@ export class MongoDBStorage {
       }
       
       if (typeof operation.videoId === 'string') {
-        operation.videoId = mongoose.Types.ObjectId(operation.videoId);
+        try {
+          operation.videoId = new mongoose.Types.ObjectId(operation.videoId);
+        } catch (err) {
+          console.warn('Invalid ObjectId format for operation.videoId:', operation.videoId);
+        }
       }
       return await Operation.create(operation);
     } catch (error) {
@@ -234,14 +276,26 @@ export class MongoDBStorage {
       }
       
       if (typeof render.videoId === 'string') {
-        render.videoId = mongoose.Types.ObjectId(render.videoId);
+        try {
+          render.videoId = new mongoose.Types.ObjectId(render.videoId);
+        } catch (err) {
+          console.warn('Invalid ObjectId format for render.videoId:', render.videoId);
+        }
       }
       
       // Convert operation IDs to ObjectId if they are strings
       if (render.operations && Array.isArray(render.operations)) {
-        render.operations = render.operations.map(opId => 
-          typeof opId === 'string' ? mongoose.Types.ObjectId(opId) : opId
-        );
+        render.operations = render.operations.map(opId => {
+          if (typeof opId === 'string') {
+            try {
+              return new mongoose.Types.ObjectId(opId);
+            } catch (err) {
+              console.warn('Invalid ObjectId format for operation ID:', opId);
+              return opId;
+            }
+          }
+          return opId;
+        });
       }
       
       return await Render.create(render);
