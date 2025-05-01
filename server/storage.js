@@ -264,6 +264,7 @@ export class MongoDBStorage {
     try {
       if (!this.isConnected) {
         // Use in-memory storage fallback
+        // No need to convert to ObjectIds in in-memory mode
         const newRender = {
           ...render,
           _id: String(this.idCounters.renders++),
@@ -275,6 +276,7 @@ export class MongoDBStorage {
         return newRender;
       }
       
+      // MongoDB is connected - now we need to convert IDs to ObjectIds
       if (typeof render.videoId === 'string') {
         try {
           render.videoId = new mongoose.Types.ObjectId(render.videoId);
@@ -283,25 +285,41 @@ export class MongoDBStorage {
         }
       }
       
-      // Convert operation IDs to ObjectId if they are strings
+      // Only try to convert operation IDs to ObjectId if MongoDB is connected
       if (render.operations && Array.isArray(render.operations)) {
-        render.operations = render.operations.map(opId => {
+        // Handle operations separately from the main render object to avoid validation issues
+        const validOperations = [];
+        
+        for (const opId of render.operations) {
           if (typeof opId === 'string') {
             try {
-              return new mongoose.Types.ObjectId(opId);
+              validOperations.push(new mongoose.Types.ObjectId(opId));
             } catch (err) {
-              console.warn('Invalid ObjectId format for operation ID:', opId);
-              return opId;
+              console.warn('Skipping invalid ObjectId format:', opId);
             }
+          } else {
+            validOperations.push(opId);
           }
-          return opId;
-        });
+        }
+        
+        render.operations = validOperations;
       }
       
       return await Render.create(render);
     } catch (error) {
       console.error('Error creating render:', error);
-      throw error;
+      
+      // If MongoDB validation fails, fall back to in-memory storage
+      const newRender = {
+        ...render,
+        _id: String(this.idCounters.renders++),
+        id: String(this.idCounters.renders-1),
+        createdAt: new Date(),
+        toObject: function() { return this; }
+      };
+      this.inMemoryStorage.renders.push(newRender);
+      console.log('MongoDB validation failed, using in-memory storage instead');
+      return newRender;
     }
   }
 

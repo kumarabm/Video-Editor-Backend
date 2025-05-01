@@ -206,8 +206,10 @@ const renderVideo = async (req, res) => {
     const videoId = req.params.id;
     const { operations, output } = req.body;
 
+    console.log(`Received render request for video ${videoId}:`, JSON.stringify(req.body, null, 2));
+
     // If operations is provided, validate it
-    if (operations && (!Array.isArray(operations) || operations.some(op => typeof op !== 'string'))) {
+    if (operations && (!Array.isArray(operations))) {
       return res.status(400).json({ 
         success: false, 
         message: 'Operations must be an array of operation IDs' 
@@ -231,10 +233,14 @@ const renderVideo = async (req, res) => {
       }
     }
 
+    // Process the operation IDs - convert all to strings to avoid ObjectId issues
+    const processedOperations = operations ? operations.map(op => String(op)) : [];
+    console.log(`Using processed operations: ${JSON.stringify(processedOperations)}`);
+
     // Create render job
     const render = await createRenderJob(
       videoId,
-      operations,
+      processedOperations,
       output
     );
 

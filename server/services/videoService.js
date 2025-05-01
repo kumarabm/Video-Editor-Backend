@@ -117,12 +117,11 @@ const createRenderJob = async (
     throw new Error(`Video not found: ${videoId}`);
   }
   
-  // Create render record
+  // Create render record - handle operations as string to avoid ObjectId validation issues
+  // with in-memory storage, which will convert them to ObjectIds if mongoose is connected
   const render = {
-    videoId: ObjectId.isValid(videoId) ? new ObjectId(videoId) : videoId,
-    operations: operations ? operations.map(id => 
-      ObjectId.isValid(id) ? new ObjectId(id) : id
-    ) : [],
+    videoId: videoId,
+    operations: operations || [],
     status: 'pending',
     progress: 0,
     output: {
