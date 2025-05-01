@@ -4,6 +4,40 @@ import ffprobeStatic from 'ffprobe-static';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { getTempFilePath } from '../utils/fileUtils.js';
+import { fileURLToPath } from 'url';
+
+// Calculate __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Check if we're in development mode (for mocking FFmpeg operations)
+const isDevelopment = process.env.NODE_ENV === 'development';
+// Always use mocks in development mode or if MOCK_FFMPEG is set to true
+const useMocks = process.env.MOCK_FFMPEG === 'true' || (isDevelopment && true);
+
+// Create mock directories if they don't exist
+async function ensureMockDirectories() {
+  try {
+    const mockDirs = [
+      path.join(__dirname, '../../uploads'),
+      path.join(__dirname, '../../uploads/processed'),
+      path.join(__dirname, '../../uploads/rendered'),
+      path.join(__dirname, '../../temp')
+    ];
+    
+    for (const dir of mockDirs) {
+      await fs.mkdir(dir, { recursive: true });
+      console.log(`Created directory: ${dir}`);
+    }
+  } catch (error) {
+    console.error('Error creating mock directories:', error);
+  }
+}
+
+// Ensure mock directories exist in development
+if (isDevelopment) {
+  ensureMockDirectories();
+}
 
 const ffprobePath = ffprobeStatic.path;
 
@@ -12,9 +46,73 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath);
 
 /**
+ * Mock function for FFmpeg operations
+ */
+const mockFFmpegOperation = async (operation, inputPath, outputPath, options = {}, updateProgress = null) => {
+  console.log(`Mocking FFmpeg operation: ${operation}`);
+  console.log(`Input path: ${inputPath}`);
+  console.log(`Output path: ${outputPath}`);
+  console.log('Options:', options);
+  
+  try {
+    // Create the output directory if it doesn't exist
+    const outputDir = path.dirname(outputPath);
+    await fs.mkdir(outputDir, { recursive: true });
+    
+    // Simulate progress updates
+    if (updateProgress) {
+      for (let i = 0; i <= 100; i += 20) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        updateProgress(i);
+      }
+    }
+    
+    // Create a mock output file
+    const content = `This is a mock ${operation} file created at ${new Date().toISOString()}
+Input: ${inputPath}
+Output: ${outputPath}
+Options: ${JSON.stringify(options)}
+`;
+    
+    await fs.writeFile(outputPath, content);
+    console.log(`Created mock output file: ${outputPath}`);
+    
+    return {
+      success: true,
+      outputPath
+    };
+  } catch (error) {
+    console.error(`Error in mock FFmpeg operation:`, error);
+    throw error;
+  }
+};
+
+/**
  * Get video metadata using FFmpeg
  */
 const getVideoMetadata = (filePath) => {
+  // If using mocks, return fake metadata
+  if (useMocks) {
+    console.log(`Mocking video metadata for: ${filePath}`);
+    return Promise.resolve({
+      format: {
+        filename: filePath,
+        duration: 60, // 1 minute
+        size: 1024 * 1024 * 10 // 10MB
+      },
+      streams: [
+        {
+          codec_type: 'video',
+          width: 1280,
+          height: 720,
+          duration: 60,
+          r_frame_rate: '30/1'
+        }
+      ]
+    });
+  }
+  
+  // Real implementation
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(filePath, (err, metadata) => {
       if (err) {
@@ -46,6 +144,14 @@ const trimVideo = (
   endTime,
   progressCallback
 ) => {
+  // Use mock implementation in development mode
+  if (useMocks) {
+    console.log(`Mocking trim video: ${inputPath} -> ${outputPath}`);
+    console.log(`Trim from ${startTime} to ${endTime}`);
+    return mockFFmpegOperation('trim', inputPath, outputPath, { startTime, endTime }, progressCallback);
+  }
+  
+  // Real implementation
   return new Promise((resolve, reject) => {
     const duration = endTime - startTime;
     
@@ -117,6 +223,14 @@ const addSubtitlesToVideo = async (
   style = {},
   progressCallback
 ) => {
+  // Use mock implementation in development mode
+  if (useMocks) {
+    console.log(`Mocking add subtitles to video: ${inputPath} -> ${outputPath}`);
+    console.log(`Subtitles count: ${subtitles.length}`);
+    return mockFFmpegOperation('subtitles', inputPath, outputPath, { subtitles, style }, progressCallback);
+  }
+  
+  // Real implementation
   const subtitlePath = await generateSubtitleFile(subtitles);
   
   const fontSize = style.fontSize || 24;
@@ -177,6 +291,17 @@ const renderFinalVideo = async (
   quality = 'high',
   progressCallback
 ) => {
+  // Use mock implementation in development mode
+  if (useMocks) {
+    console.log(`Mocking render final video: ${originalVideoPath} -> ${outputPath}`);
+    console.log(`Operation paths count: ${operationPaths.length}`);
+    console.log(`Quality: ${quality}`);
+    return mockFFmpegOperation('render', originalVideoPath, outputPath, { 
+      operationPaths, 
+      quality 
+    }, progressCallback);
+  }
+  
   // Define quality preset
   const qualitySettings = {
     low: { crf: '28', preset: 'faster' },
